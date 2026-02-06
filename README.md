@@ -52,6 +52,22 @@ Then open `Settings` from the menu bar popover and configure:
 - Save JSON metadata toggle
 - Hugging Face token (saved in Keychain)
 
+## Tests
+
+Run the full regression checks (recommended):
+
+```bash
+cd /Users/luisperichon/oppy
+./scripts/test.sh
+```
+
+Run only Python worker unit tests:
+
+```bash
+cd /Users/luisperichon/oppy
+worker/.venv/bin/python -m unittest discover -s worker/tests -p "test_*.py"
+```
+
 ## Notes
 
 - Add a microphone usage description in app signing/distribution contexts.

@@ -79,11 +79,20 @@ def main() -> int:
         )
 
         emit_progress("diarization", "Running pyannote diarization")
-        diarization_output = diarize_with_pyannote(
-            audio_path=str(audio_path),
-            model=config.diarization_model,
-            token=token,
-        )
+        diarization_warning = None
+        try:
+            diarization_output = diarize_with_pyannote(
+                audio_path=str(audio_path),
+                model=config.diarization_model,
+                token=token,
+            )
+        except Exception as exc:
+            diarization_output = []
+            diarization_warning = str(exc)
+            emit_progress(
+                "diarization",
+                "Diarization failed, continuing with unknown speakers",
+            )
 
         emit_progress("merge", "Assigning speakers to transcript segments")
         merged_segments = merge_segments_with_speakers(
@@ -110,7 +119,11 @@ def main() -> int:
             transcript_path=paths["transcript_path"],
             wav_path=paths["wav_path"],
             json_path=paths.get("json_path"),
-            message="Processing complete",
+            message=(
+                "Processing complete"
+                if not diarization_warning
+                else f"Processing complete (diarization fallback: {diarization_warning})"
+            ),
         )
         return 0
     except Exception as exc:
