@@ -1,5 +1,6 @@
 import AVFoundation
 import AppKit
+import CoreGraphics
 import Foundation
 import SwiftUI
 
@@ -26,12 +27,31 @@ enum SessionState: Equatable {
     }
 }
 
+struct PreflightStatus {
+    let microphoneReady: Bool
+    let screenAudioReady: Bool
+    let tokenReady: Bool
+
+    var summaryText: String {
+        "Mic: \(flag(microphoneReady))  Screen Audio: \(flag(screenAudioReady))  Token: \(flag(tokenReady))"
+    }
+
+    private static func flag(_ value: Bool) -> String {
+        value ? "OK" : "Missing"
+    }
+
+    private func flag(_ value: Bool) -> String {
+        Self.flag(value)
+    }
+}
+
 @MainActor
 final class AppStateStore: ObservableObject {
     @Published var state: SessionState = .idle
     @Published var elapsedSeconds: TimeInterval = 0
     @Published var progressDetail: String = ""
     @Published var latestError: String?
+    @Published var preflightStatus = PreflightStatus(microphoneReady: false, screenAudioReady: false, tokenReady: false)
 
     private let recorder = AudioRecorder()
     private let workerLauncher = WorkerLauncher()
@@ -40,6 +60,10 @@ final class AppStateStore: ObservableObject {
     private var timer: Timer?
     private var sessionStartDate: Date?
     private var currentAudioURL: URL?
+
+    init() {
+        refreshPreflightStatus()
+    }
 
     var menuBarIconName: String {
         switch state {
@@ -91,11 +115,29 @@ final class AppStateStore: ObservableObject {
         NSWorkspace.shared.open(baseFolder)
     }
 
+    func refreshPreflightStatus() {
+        let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        let microphoneReady = (micStatus == .authorized)
+        let screenAudioReady = CGPreflightScreenCaptureAccess()
+        let tokenReady: Bool
+        do {
+            tokenReady = !(try keychain.readToken()).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        } catch {
+            tokenReady = false
+        }
+        preflightStatus = PreflightStatus(
+            microphoneReady: microphoneReady,
+            screenAudioReady: screenAudioReady,
+            tokenReady: tokenReady
+        )
+    }
+
     private func makeSessionURLs() throws -> (audio: URL, outputFolder: URL, dateFolder: String) {
         let now = Date()
         let dateFolder = DateFormatter.sessionDateFolder.string(from: now)
         let timestamp = DateFormatter.sessionTimestamp.string(from: now)
-        let outputFolder = URL(fileURLWithPath: settings.transcriptFolderPath)
+        let expandedPath = (settings.transcriptFolderPath as NSString).expandingTildeInPath
+        let outputFolder = URL(fileURLWithPath: expandedPath)
             .appendingPathComponent(dateFolder, isDirectory: true)
         try FileManager.default.createDirectory(at: outputFolder, withIntermediateDirectories: true)
 
@@ -111,14 +153,22 @@ final class AppStateStore: ObservableObject {
         progressDetail = ""
 
         let authorized = await requestMicrophoneAccessIfNeeded()
+        refreshPreflightStatus()
         guard authorized else {
             state = .error("Microphone permission denied. Enable access in System Settings > Privacy & Security > Microphone.")
             return
         }
 
+        let screenAuthorized = requestScreenCaptureAccessIfNeeded()
+        refreshPreflightStatus()
+        guard screenAuthorized else {
+            state = .error("Screen and system audio capture permission denied. Enable access in System Settings > Privacy & Security > Screen Recording.")
+            return
+        }
+
         do {
             let sessionURLs = try makeSessionURLs()
-            try recorder.startRecording(to: sessionURLs.audio)
+            try await recorder.startRecording(to: sessionURLs.audio)
             currentAudioURL = sessionURLs.audio
             sessionStartDate = Date()
             elapsedSeconds = 0
@@ -127,6 +177,7 @@ final class AppStateStore: ObservableObject {
         } catch {
             state = .error("Failed to start recording: \(error.localizedDescription)")
         }
+        refreshPreflightStatus()
     }
 
     private func stopRecordingInternal() async {
@@ -136,7 +187,7 @@ final class AppStateStore: ObservableObject {
         progressDetail = "Finalizing recording..."
 
         do {
-            try recorder.stopRecording()
+            try await recorder.stopRecording()
             guard let audioURL = currentAudioURL else {
                 throw NSError(domain: "Oppy", code: 1001, userInfo: [NSLocalizedDescriptionKey: "Missing recording file URL"])
             }
@@ -176,6 +227,7 @@ final class AppStateStore: ObservableObject {
         } catch {
             state = .error(error.localizedDescription)
         }
+        refreshPreflightStatus()
     }
 
     private func requestMicrophoneAccessIfNeeded() async -> Bool {
@@ -189,6 +241,13 @@ final class AppStateStore: ObservableObject {
         @unknown default:
             return false
         }
+    }
+
+    private func requestScreenCaptureAccessIfNeeded() -> Bool {
+        if CGPreflightScreenCaptureAccess() {
+            return true
+        }
+        return CGRequestScreenCaptureAccess()
     }
 
     private func startTimer() {

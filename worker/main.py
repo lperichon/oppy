@@ -8,6 +8,7 @@ from pathlib import Path
 from pipeline.asr import transcribe_with_mlx
 from pipeline.diarization import diarize_with_pyannote
 from pipeline.export import export_outputs
+from pipeline.input_mix import maybe_mix_microphone_track
 from pipeline.merge import merge_segments_with_speakers
 
 
@@ -71,9 +72,12 @@ def main() -> int:
             )
             return 1
 
+        emit_progress("mix", "Preparing combined audio track")
+        mixed_audio_path = maybe_mix_microphone_track(str(audio_path))
+
         emit_progress("asr", "Transcribing with MLX model")
         asr_output = transcribe_with_mlx(
-            audio_path=str(audio_path),
+            audio_path=mixed_audio_path,
             model=config.asr_model,
             language=config.language,
         )

@@ -71,5 +71,7 @@ worker/.venv/bin/python -m unittest discover -s worker/tests -p "test_*.py"
 ## Notes
 
 - Add a microphone usage description in app signing/distribution contexts.
+- App capture now uses system audio + microphone (requires both Microphone and Screen Recording permissions).
+- Recording writes a sidecar mic file (`<session>.mic.wav`) and auto-mixes it into the main session WAV before transcription.
 - First run may download large ASR/diarization models.
 - Worker protocol is line-delimited JSON over stdout.

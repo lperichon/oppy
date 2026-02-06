@@ -29,6 +29,11 @@ struct PopoverView: View {
                     .lineLimit(2)
             }
 
+            Text(appState.preflightStatus.summaryText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             if case let .error(message) = appState.state {
                 Text(message)
                     .font(.footnote)
@@ -82,6 +87,9 @@ struct PopoverView: View {
             .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 14)
+        .onAppear {
+            appState.refreshPreflightStatus()
+        }
     }
 
     private func durationText(_ seconds: TimeInterval) -> String {

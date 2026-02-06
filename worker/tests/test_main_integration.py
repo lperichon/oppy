@@ -60,7 +60,7 @@ class MainIntegrationTests(unittest.TestCase):
 
             lines = [json.loads(line) for line in output_buffer.getvalue().splitlines() if line.strip()]
             progress_stages = [line.get("stage") for line in lines if line.get("type") == "progress"]
-            self.assertEqual(progress_stages, ["asr", "diarization", "merge", "export"])
+            self.assertEqual(progress_stages, ["mix", "asr", "diarization", "merge", "export"])
 
             result = next(line for line in lines if line.get("type") == "result")
             self.assertTrue(result["success"])
