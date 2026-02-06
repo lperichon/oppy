@@ -1,0 +1,7 @@
+.DS_Store
+.build
+.swiftpm
+venv
+worker/.venv
+__pycache__/
+*.pyc
