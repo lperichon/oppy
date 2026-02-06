@@ -2,6 +2,14 @@ import AppKit
 import SwiftUI
 
 struct SettingsView: View {
+    private enum Field: Hashable {
+        case hfToken
+        case asrModel
+        case diarizationModel
+        case languageMode
+        case transcriptFolder
+    }
+
     @State private var transcriptFolderPath = SettingsStore.shared.transcriptFolderPath
     @State private var asrModel = SettingsStore.shared.defaultAsrModel
     @State private var diarizationModel = SettingsStore.shared.defaultDiarizationModel
@@ -10,6 +18,7 @@ struct SettingsView: View {
     @State private var keepWav = SettingsStore.shared.keepWavAfterProcessing
     @State private var hfTokenInput = ""
     @State private var tokenStatus = ""
+    @FocusState private var focusedField: Field?
 
     private let keychain = KeychainService()
 
@@ -23,6 +32,7 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                         SecureField("hf_...", text: $hfTokenInput)
                             .textFieldStyle(.roundedBorder)
+                            .focused($focusedField, equals: .hfToken)
                         HStack(spacing: 8) {
                             Button("Save Token") {
                                 saveToken()
@@ -45,10 +55,13 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         TextField("ASR model", text: $asrModel)
                             .textFieldStyle(.roundedBorder)
+                            .focused($focusedField, equals: .asrModel)
                         TextField("Diarization model", text: $diarizationModel)
                             .textFieldStyle(.roundedBorder)
+                            .focused($focusedField, equals: .diarizationModel)
                         TextField("Language mode (auto or code)", text: $languageMode)
                             .textFieldStyle(.roundedBorder)
+                            .focused($focusedField, equals: .languageMode)
                     }
                     .padding(8)
                 }
@@ -58,6 +71,7 @@ struct SettingsView: View {
                         HStack {
                             TextField("Transcript folder", text: $transcriptFolderPath)
                                 .textFieldStyle(.roundedBorder)
+                                .focused($focusedField, equals: .transcriptFolder)
                             Button("Choose") {
                                 chooseFolder()
                             }
@@ -79,7 +93,16 @@ struct SettingsView: View {
             .padding()
         }
         .onAppear {
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
             refreshTokenStatus()
+            DispatchQueue.main.async {
+                focusedField = .hfToken
+                NSApp.keyWindow?.makeKeyAndOrderFront(nil)
+            }
+        }
+        .onDisappear {
+            NSApp.setActivationPolicy(.accessory)
         }
     }
 

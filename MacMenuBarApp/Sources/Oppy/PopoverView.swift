@@ -61,14 +61,14 @@ struct PopoverView: View {
                 Button("Open Transcripts Folder") {
                     appState.openTranscriptFolder()
                 }
-                SettingsLink(label: {
-                    Text("Settings")
-                })
+                Button("Settings") {
+                    openSettingsWindow()
+                }
             }
 
             if case let .error(message) = appState.state, message.localizedCaseInsensitiveContains("token") {
                 Button("Add Hugging Face Token") {
-                    openSettings()
+                    openSettingsWindow()
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -97,5 +97,11 @@ struct PopoverView: View {
         let mins = total / 60
         let secs = total % 60
         return String(format: "%02d:%02d", mins, secs)
+    }
+
+    private func openSettingsWindow() {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        openSettings()
     }
 }
