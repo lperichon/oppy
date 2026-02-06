@@ -68,6 +68,31 @@ cd /Users/luisperichon/oppy
 worker/.venv/bin/python -m unittest discover -s worker/tests -p "test_*.py"
 ```
 
+## Package For Sharing (No App Store)
+
+Build a `.app` and `.zip` in `dist/`:
+
+```bash
+cd /Users/luisperichon/oppy
+scripts/package_macos.sh
+```
+
+Optional flags:
+
+- `--bundle-venv`: bundle `worker/.venv` into the app so recipients do not need to set up Python deps manually.
+- `--identity "Developer ID Application: ..."`: sign the app for distribution.
+- `--notary-profile "..."`: notarize with `notarytool` keychain profile (requires `--identity`).
+
+Example signed + notarized build:
+
+```bash
+cd /Users/luisperichon/oppy
+scripts/package_macos.sh \
+  --bundle-venv \
+  --identity "Developer ID Application: Your Name (TEAMID)" \
+  --notary-profile "oppy-notary"
+```
+
 ## Notes
 
 - Add a microphone usage description in app signing/distribution contexts.

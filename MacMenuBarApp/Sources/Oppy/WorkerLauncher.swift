@@ -185,6 +185,13 @@ final class WorkerLauncher {
             return fromCwd.path
         }
 
+        if let resourceURL = Bundle.main.resourceURL {
+            let fromBundleResources = resourceURL.appendingPathComponent("worker/main.py")
+            if FileManager.default.fileExists(atPath: fromBundleResources.path) {
+                return fromBundleResources.path
+            }
+        }
+
         let fromExecutable = URL(fileURLWithPath: CommandLine.arguments[0])
             .deletingLastPathComponent()
             .appendingPathComponent("worker/main.py")
