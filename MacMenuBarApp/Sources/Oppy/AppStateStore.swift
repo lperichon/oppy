@@ -282,12 +282,26 @@ final class AppStateStore: ObservableObject {
                 state = .done(transcriptURL)
             } else {
                 let message = result.message ?? "Unknown worker error"
+                writeWorkerErrorLog(message)
                 state = .error(message)
             }
         } catch {
+            writeWorkerErrorLog(error.localizedDescription)
             state = .error(error.localizedDescription)
         }
         refreshPreflightStatus()
+    }
+
+    private func writeWorkerErrorLog(_ message: String) {
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let body = "[\(timestamp)] \(message)\n"
+        let fileURL = URL(fileURLWithPath: "/tmp/oppy-worker-last-error.log")
+        do {
+            try body.write(to: fileURL, atomically: true, encoding: .utf8)
+        } catch {
+            NSLog("Oppy: failed to write worker error log: \(error.localizedDescription)")
+        }
+        NSLog("Oppy worker error: \(message)")
     }
 
     private func requestMicrophoneAccessIfNeeded() async -> Bool {

@@ -2,6 +2,7 @@ import Foundation
 
 final class WorkerLauncher {
     typealias ProgressHandler = (String) -> Void
+    static let readinessProbeScript = "import mlx_audio; import pyannote.audio; import soundfile"
 
     func run(
         config: WorkerConfig,
@@ -152,7 +153,12 @@ final class WorkerLauncher {
             wavPath: nil,
             jsonPath: nil,
             errorCode: "WORKER_UNEXPECTED_EXIT",
-            message: makeUnexpectedExitMessage(status: process.terminationStatus, rawWorkerLines: rawWorkerLines)
+            message: makeUnexpectedExitMessage(
+                status: process.terminationStatus,
+                rawWorkerLines: rawWorkerLines,
+                pythonExecutable: launchCommand.executable,
+                workerScriptPath: scriptPath
+            )
         )
     }
 
@@ -186,10 +192,21 @@ final class WorkerLauncher {
         let venvPython = workerDirectory
             .appendingPathComponent(".venv/bin/python3")
             .path
-        if FileManager.default.fileExists(atPath: venvPython), isWorkerEnvironmentReady(pythonExecutable: venvPython) {
-            return (venvPython, [])
+        if FileManager.default.fileExists(atPath: venvPython) {
+            if isWorkerEnvironmentReady(pythonExecutable: venvPython) {
+                return (venvPython, [])
+            }
+
+            if isPackagedWorkerScriptPath(scriptPath) {
+                return (venvPython, [])
+            }
         }
         return ("/usr/bin/env", ["python3"])
+    }
+
+    private func isPackagedWorkerScriptPath(_ scriptPath: String) -> Bool {
+        let normalizedPath = (scriptPath as NSString).standardizingPath
+        return normalizedPath.contains(".app/Contents/Resources/worker/main.py")
     }
 
     private func isWorkerEnvironmentReady(pythonExecutable: String) -> Bool {
@@ -198,7 +215,7 @@ final class WorkerLauncher {
         process.standardOutput = pipe
         process.standardError = pipe
         process.executableURL = URL(fileURLWithPath: pythonExecutable)
-        process.arguments = ["-c", "import mlx_audio; import pyannote.audio"]
+        process.arguments = ["-c", Self.readinessProbeScript]
 
         do {
             try process.run()
@@ -209,12 +226,18 @@ final class WorkerLauncher {
         }
     }
 
-    private func makeUnexpectedExitMessage(status: Int32, rawWorkerLines: [String]) -> String {
+    private func makeUnexpectedExitMessage(
+        status: Int32,
+        rawWorkerLines: [String],
+        pythonExecutable: String,
+        workerScriptPath: String
+    ) -> String {
         let tail = rawWorkerLines.last ?? ""
+        let runtimeInfo = "python executable: \(pythonExecutable), worker script: \(workerScriptPath)"
         if !tail.isEmpty {
-            return "Worker exited with status \(status): \(tail)"
+            return "Worker exited with status \(status): \(tail) [\(runtimeInfo)]"
         }
-        return "Worker exited with status \(status)"
+        return "Worker exited with status \(status) [\(runtimeInfo)]"
     }
 
     private func writeTempConfig(_ config: WorkerConfig) throws -> URL {
@@ -227,18 +250,18 @@ final class WorkerLauncher {
     }
 
     private func resolveWorkerScriptPath() throws -> String {
-        let cwdPath = FileManager.default.currentDirectoryPath
-        let fromCwd = URL(fileURLWithPath: cwdPath)
-            .appendingPathComponent("worker/main.py")
-        if FileManager.default.fileExists(atPath: fromCwd.path) {
-            return fromCwd.path
-        }
-
         if let resourceURL = Bundle.main.resourceURL {
             let fromBundleResources = resourceURL.appendingPathComponent("worker/main.py")
             if FileManager.default.fileExists(atPath: fromBundleResources.path) {
                 return fromBundleResources.path
             }
+        }
+
+        let cwdPath = FileManager.default.currentDirectoryPath
+        let fromCwd = URL(fileURLWithPath: cwdPath)
+            .appendingPathComponent("worker/main.py")
+        if FileManager.default.fileExists(atPath: fromCwd.path) {
+            return fromCwd.path
         }
 
         let fromExecutable = URL(fileURLWithPath: CommandLine.arguments[0])
@@ -248,7 +271,7 @@ final class WorkerLauncher {
             return fromExecutable.path
         }
 
-        throw NSError(domain: "Oppy", code: 4001, userInfo: [NSLocalizedDescriptionKey: "Could not locate worker/main.py"]) 
+        throw NSError(domain: "Oppy", code: 4001, userInfo: [NSLocalizedDescriptionKey: "Could not locate worker/main.py"])
     }
 }
 

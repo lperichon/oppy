@@ -23,7 +23,7 @@ Usage: scripts/package_macos.sh [options]
 Builds a distributable macOS .app bundle and zip archive at dist/.
 
 Options:
-  --bundle-venv            Include worker/.venv inside app bundle.
+  --bundle-venv            Build and include portable worker virtualenv inside app bundle.
   --identity "NAME"        Developer ID identity for codesign.
   --notary-profile "NAME"  notarytool keychain profile name.
   -h, --help               Show this help message.
@@ -128,19 +128,21 @@ RSYNC_EXCLUDES=(
 )
 
 if [[ "$BUNDLE_VENV" -eq 1 ]]; then
-  if [[ ! -d "$WORKER_SRC_DIR/.venv" ]]; then
-    echo "--bundle-venv was passed, but worker/.venv does not exist" >&2
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "--bundle-venv requires python3 to be installed" >&2
     exit 1
   fi
-  RSYNC_EXCLUDES=(
-    --exclude='__pycache__/'
-    --exclude='.pytest_cache/'
-    --exclude='tests/'
-    --exclude='*.pyc'
-  )
 fi
 
 rsync -a "${RSYNC_EXCLUDES[@]}" "$WORKER_SRC_DIR/" "$WORKER_DST_DIR/"
+
+if [[ "$BUNDLE_VENV" -eq 1 ]]; then
+  echo "[3.1/6] Building portable worker virtualenv..."
+  rm -rf "$WORKER_DST_DIR/.venv"
+  python3 -m venv --copies "$WORKER_DST_DIR/.venv"
+  "$WORKER_DST_DIR/.venv/bin/python3" -m pip install --upgrade pip
+  "$WORKER_DST_DIR/.venv/bin/python3" -m pip install -r "$WORKER_DST_DIR/requirements.txt"
+fi
 
 if [[ -z "$IDENTITY" ]]; then
   echo "[4/6] Skipping codesign (no --identity provided)."
