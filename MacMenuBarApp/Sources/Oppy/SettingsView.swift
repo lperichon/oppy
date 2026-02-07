@@ -83,6 +83,10 @@ struct SettingsView: View {
                 }
 
                 HStack {
+                    Button("Warm ASR Model Now") {
+                        NotificationCenter.default.post(name: .oppyASRBootstrapRequested, object: nil)
+                        tokenStatus = "ASR model warmup started"
+                    }
                     Spacer()
                     Button("Save Settings") {
                         saveSettings()
@@ -107,12 +111,22 @@ struct SettingsView: View {
     }
 
     private func saveSettings() {
+        let previousAsrModel = SettingsStore.shared.defaultAsrModel
+        let previousLanguage = SettingsStore.shared.languageMode
+
         SettingsStore.shared.transcriptFolderPath = transcriptFolderPath
         SettingsStore.shared.defaultAsrModel = asrModel
         SettingsStore.shared.defaultDiarizationModel = diarizationModel
         SettingsStore.shared.languageMode = languageMode.isEmpty ? "auto" : languageMode
         SettingsStore.shared.saveJsonMetadata = saveJson
         SettingsStore.shared.keepWavAfterProcessing = keepWav
+
+        let newLanguage = languageMode.isEmpty ? "auto" : languageMode
+        if previousAsrModel != asrModel || previousLanguage != newLanguage {
+            NotificationCenter.default.post(name: .oppyASRBootstrapRequested, object: nil)
+            tokenStatus = "Settings saved. ASR warmup started"
+            return
+        }
         tokenStatus = "Settings saved"
     }
 

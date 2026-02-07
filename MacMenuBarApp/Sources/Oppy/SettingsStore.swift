@@ -12,6 +12,7 @@ final class SettingsStore {
         static let languageMode = "settings.languageMode"
         static let saveJsonMetadata = "settings.saveJsonMetadata"
         static let keepWavAfterProcessing = "settings.keepWavAfterProcessing"
+        static let lastBootstrappedAsrModel = "settings.lastBootstrappedAsrModel"
     }
 
     var transcriptFolderPath: String {
@@ -57,5 +58,12 @@ final class SettingsStore {
             defaults.object(forKey: Keys.keepWavAfterProcessing) as? Bool ?? true
         }
         set { defaults.set(newValue, forKey: Keys.keepWavAfterProcessing) }
+    }
+
+    var lastBootstrappedAsrModel: String {
+        get {
+            defaults.string(forKey: Keys.lastBootstrappedAsrModel) ?? ""
+        }
+        set { defaults.set(newValue, forKey: Keys.lastBootstrappedAsrModel) }
     }
 }

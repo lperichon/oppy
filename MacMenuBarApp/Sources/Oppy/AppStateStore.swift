@@ -50,6 +50,7 @@ final class AppStateStore: ObservableObject {
     @Published var state: SessionState = .idle
     @Published var elapsedSeconds: TimeInterval = 0
     @Published var progressDetail: String = ""
+    @Published var bootstrapDetail: String = ""
     @Published var latestError: String?
     @Published var preflightStatus = PreflightStatus(microphoneReady: false, screenAudioReady: false, tokenReady: false)
 
@@ -60,9 +61,28 @@ final class AppStateStore: ObservableObject {
     private var timer: Timer?
     private var sessionStartDate: Date?
     private var currentAudioURL: URL?
+    private var bootstrapTask: Task<Void, Never>?
+    private var asrBootstrapObserver: NSObjectProtocol?
 
     init() {
         refreshPreflightStatus()
+        asrBootstrapObserver = NotificationCenter.default.addObserver(
+            forName: .oppyASRBootstrapRequested,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.scheduleASRBootstrapIfNeeded(force: true)
+            }
+        }
+        scheduleASRBootstrapIfNeeded(force: false)
+    }
+
+    deinit {
+        if let asrBootstrapObserver {
+            NotificationCenter.default.removeObserver(asrBootstrapObserver)
+        }
+        bootstrapTask?.cancel()
     }
 
     var menuBarIconName: String {
@@ -130,6 +150,46 @@ final class AppStateStore: ObservableObject {
             screenAudioReady: screenAudioReady,
             tokenReady: tokenReady
         )
+    }
+
+    private func scheduleASRBootstrapIfNeeded(force: Bool) {
+        guard bootstrapTask == nil else { return }
+
+        let model = settings.defaultAsrModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        if model.isEmpty {
+            bootstrapDetail = "ASR warmup skipped: model is empty"
+            return
+        }
+
+        if !force, settings.lastBootstrappedAsrModel == model {
+            return
+        }
+
+        let language = settings.languageMode.isEmpty ? "auto" : settings.languageMode
+        bootstrapDetail = "Warming ASR model cache..."
+
+        bootstrapTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.bootstrapTask = nil }
+            do {
+                let result = try await self.workerLauncher.bootstrapASRModel(
+                    asrModel: model,
+                    language: language
+                ) { [weak self] update in
+                    Task { @MainActor in
+                        self?.bootstrapDetail = update
+                    }
+                }
+                if result.success {
+                    self.settings.lastBootstrappedAsrModel = model
+                    self.bootstrapDetail = "ASR model ready"
+                } else {
+                    self.bootstrapDetail = result.message ?? "ASR warmup failed"
+                }
+            } catch {
+                self.bootstrapDetail = "ASR warmup failed: \(error.localizedDescription)"
+            }
+        }
     }
 
     private func makeSessionURLs() throws -> (audio: URL, outputFolder: URL, dateFolder: String) {

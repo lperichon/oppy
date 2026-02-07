@@ -29,6 +29,13 @@ struct PopoverView: View {
                     .lineLimit(2)
             }
 
+            if !appState.bootstrapDetail.isEmpty {
+                Text(appState.bootstrapDetail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
             Text(appState.preflightStatus.summaryText)
                 .font(.caption)
                 .foregroundStyle(.secondary)

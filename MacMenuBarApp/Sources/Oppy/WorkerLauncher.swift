@@ -20,6 +20,27 @@ final class WorkerLauncher {
         }
     }
 
+    func bootstrapASRModel(
+        asrModel: String,
+        language: String,
+        onProgress: @escaping ProgressHandler
+    ) async throws -> WorkerResult {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                do {
+                    let result = try self.runBootstrapSynchronously(
+                        asrModel: asrModel,
+                        language: language,
+                        onProgress: onProgress
+                    )
+                    continuation.resume(returning: result)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
     private func runSynchronously(
         config: WorkerConfig,
         hfToken: String,
@@ -28,17 +49,45 @@ final class WorkerLauncher {
         let configURL = try writeTempConfig(config)
         defer { try? FileManager.default.removeItem(at: configURL) }
 
-        let scriptPath = try resolveWorkerScriptPath()
+        return try runWorkerSynchronously(
+            scriptArguments: ["--config", configURL.path],
+            scriptPath: try resolveWorkerScriptPath(),
+            hfToken: hfToken,
+            onProgress: onProgress
+        )
+    }
+
+    private func runBootstrapSynchronously(
+        asrModel: String,
+        language: String,
+        onProgress: @escaping ProgressHandler
+    ) throws -> WorkerResult {
+        return try runWorkerSynchronously(
+            scriptArguments: ["--bootstrap-asr", "--asr-model", asrModel, "--language", language],
+            scriptPath: try resolveWorkerScriptPath(),
+            hfToken: nil,
+            onProgress: onProgress
+        )
+    }
+
+    private func runWorkerSynchronously(
+        scriptArguments: [String],
+        scriptPath: String,
+        hfToken: String?,
+        onProgress: @escaping ProgressHandler
+    ) throws -> WorkerResult {
         let launchCommand = resolvePythonLaunchCommand(scriptPath: scriptPath)
         let process = Process()
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
         process.executableURL = URL(fileURLWithPath: launchCommand.executable)
-        process.arguments = launchCommand.arguments + [scriptPath, "--config", configURL.path]
+        process.arguments = launchCommand.arguments + [scriptPath] + scriptArguments
 
         var environment = ProcessInfo.processInfo.environment
-        environment["HF_TOKEN"] = hfToken
+        if let hfToken, !hfToken.isEmpty {
+            environment["HF_TOKEN"] = hfToken
+        }
         environment["PYANNOTE_METRICS_ENABLED"] = "0"
         process.environment = environment
 
